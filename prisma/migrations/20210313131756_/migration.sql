@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Profile" ALTER COLUMN "website" DROP NOT NULL,
+ALTER COLUMN "instaURL" DROP NOT NULL,
+ALTER COLUMN "facebook" DROP NOT NULL;
