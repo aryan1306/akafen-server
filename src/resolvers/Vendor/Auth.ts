@@ -1,34 +1,13 @@
-import { generateUniqueCode } from "./../utils/genCode";
-import { sendEmail } from "./../utils/sendEmail";
 import { ApolloError } from "apollo-server-express";
-import {
-	Arg,
-	Ctx,
-	Field,
-	InputType,
-	Mutation,
-	Query,
-	Resolver,
-} from "type-graphql";
-import { Context } from "../../index";
 import { hash, verify } from "argon2";
+import { Arg, Ctx, Mutation, Query, Resolver } from "type-graphql";
+import { Vendor } from "../../entities/Vendor";
+import { Context } from "../../index";
 import { redis } from "../../redis";
-import { Vendor } from "../../../prisma/generated/type-graphql/models/Vendor";
-
-@InputType()
-export class VendorInput {
-	@Field()
-	name: string;
-
-	@Field()
-	email: string;
-
-	@Field()
-	password: string;
-
-	@Field()
-	city: string;
-}
+import { paymentMail } from "../utils/paymentMail";
+import { generateUniqueCode, generatePaymentCode } from "./../utils/genCode";
+import { sendEmail } from "./../utils/sendEmail";
+import { VendorInput } from "./VendorInput";
 
 @Resolver()
 export class VendorAuth {
@@ -39,32 +18,38 @@ export class VendorAuth {
 
 	@Mutation(() => Vendor)
 	async register(
-		@Ctx() { prisma, req }: Context,
+		@Ctx() { req }: Context,
 		@Arg("data") data: VendorInput
 	): Promise<Vendor> {
-		const existingVendor = await prisma.vendor.findFirst({
-			where: {
-				email: {
-					equals: data.email,
-				},
-			},
+		const existingVendor = await Vendor.findOne({
+			email: data.email,
+			mobile: data.mobile,
 		});
 		if (existingVendor) {
-			throw new ApolloError("An account with this email exists");
+			throw new ApolloError("An account with this email/phone exists");
 		}
 		const reg = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
 		if (!data.email.match(reg)) {
 			throw new Error("Please enter a valid email");
 		}
+
+		if (data.mobile.length !== 10) {
+			throw new ApolloError("Please Enter a valid mobile number");
+		}
+
+		if (data.whatsapp.length !== 10) {
+			throw new ApolloError("Please enter valid mobile number");
+		}
+		if (data.password.length <= 8) {
+			throw new ApolloError(
+				"Password length should be greater than 8 characters"
+			);
+		}
 		const hashedPassword = await hash(data.password);
-		const vendor = await prisma.vendor.create({
-			data: {
-				email: data.email,
-				name: data.name,
-				password: hashedPassword,
-				city: data.city,
-			},
-		});
+		const vendor = await Vendor.create({
+			...data,
+			password: hashedPassword,
+		}).save();
 		await sendEmail(await generateUniqueCode(vendor.id), vendor.email);
 		//@ts-ignore
 		req.session.vendorId = vendor.id;
@@ -73,11 +58,11 @@ export class VendorAuth {
 
 	@Mutation(() => Vendor)
 	async login(
-		@Ctx() { prisma, req }: Context,
+		@Ctx() { req }: Context,
 		@Arg("email") email: string,
 		@Arg("password") password: string
 	): Promise<Vendor> {
-		const vendor = await prisma.vendor.findFirst({ where: { email } });
+		const vendor = await Vendor.findOne({ email });
 		if (!vendor) {
 			throw new ApolloError("This account is not registered please register");
 		}
@@ -97,49 +82,41 @@ export class VendorAuth {
 	}
 
 	@Mutation(() => Boolean)
-	async confirmVendor(
-		@Ctx() { prisma, req }: Context,
-		@Arg("code") code: string
-	): Promise<Boolean> {
+	async confirmVendor(@Arg("code") code: string): Promise<Boolean> {
 		const vId = await redis.get(code);
 		if (!vId) {
 			return false;
 		}
-		await prisma.vendor.update({
-			where: { id: parseInt(vId) },
-			data: { isVerified: true },
-		});
-		await sendEmail(
-			//@ts-ignore
-			await generateUniqueCode(req.session.vendorId),
-			"keyevents13@gmail.com"
+		await Vendor.update({ id: vId }, { isVerified: true });
+		const vendor = await Vendor.findOne({ id: vId });
+		if (!vendor) {
+			return false;
+		}
+		await paymentMail(
+			await generatePaymentCode(vId),
+			vendor!.brandName,
+			vendor!.mobile
 		);
 		return true;
 	}
 	@Mutation(() => Boolean)
-	async confirmPayment(
-		@Ctx() { prisma }: Context,
-		@Arg("code") code: string
-	): Promise<Boolean> {
+	async confirmPayment(@Arg("code") code: string): Promise<Boolean> {
 		const vId = await redis.get(code);
 		if (!vId) {
 			return false;
 		}
-		await prisma.vendor.update({
-			where: { id: parseInt(vId) },
-			data: { hasPaid: true },
-		});
+		await Vendor.update({ id: vId }, { hasPaid: true });
 		return true;
 	}
 
 	@Query(() => Vendor, { nullable: true })
-	async vendorMeQuery(@Ctx() { req, prisma }: Context) {
+	async vendorMeQuery(@Ctx() { req }: Context) {
 		//@ts-ignore
 		const vId = req.session.vendorId;
 		if (!vId) {
 			return null;
 		}
-		const vendor = await prisma.vendor.findFirst({ where: { id: vId } });
+		const vendor = await Vendor.findOne({ id: vId });
 		return vendor;
 	}
 

@@ -4,25 +4,26 @@ import nodemailer from "nodemailer";
 export const sendEmail = async (code: string, email: string) => {
 	// Generate test SMTP service account from ethereal.email
 	// Only needed if you don't have a real mail account for testing
-	let testAccount = await nodemailer.createTestAccount();
+
+	// let testAccount = await nodemailer.createTestAccount();
 
 	// create reusable transporter object using the default SMTP transport
 	let transporter = nodemailer.createTransport({
-		host: "smtp.ethereal.email",
-		port: 587,
+		host: "smtp.sendgrid.net",
+		port: 25,
 		secure: false, // true for 465, false for other ports
 		auth: {
-			user: testAccount.user, // generated ethereal user
-			pass: testAccount.pass, // generated ethereal password
+			user: "apikey", // generated ethereal user
+			pass: process.env.KEY, // generated ethereal password
 		},
 	});
 
 	// send mail with defined transport object
 	let info = await transporter.sendMail({
-		from: '"Fred Foo 👻" <foo@example.com>', // sender address
+		from: "info@akafenflea.online", // sender address
 		to: email, // list of receivers
-		subject: "Hello ✔", // Subject line
-		html: `<b>${code}</b>`, // html body
+		subject: "Confirmation OTP for Akafen Flea", // Subject line
+		html: `<h1 style="text-align: center; font-size: 4em"><b>${code}</b><h1>`, // html body
 	});
 
 	console.log("Message sent: %s", info.messageId);

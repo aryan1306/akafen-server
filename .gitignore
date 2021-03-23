@@ -2,3 +2,6 @@
 node_modules/
 dist/
 .env
+.env.production
+keyevents.code-workspace
+deploy.sh

@@ -1,17 +1,17 @@
-import { Product } from "../../../prisma/generated/type-graphql/models/Product";
+import { getConnection } from "typeorm";
 import { ApolloError } from "apollo-server-express";
 import {
 	Arg,
 	Ctx,
 	Field,
 	InputType,
-	Int,
 	Mutation,
 	Query,
 	Resolver,
 	UseMiddleware,
 } from "type-graphql";
 import { Context } from "./../../index";
+import { Product } from "../../entities/Product";
 import { isVendorAuth } from "./../utils/middleware/isAuth";
 
 @InputType()
@@ -38,50 +38,96 @@ class EditProductInput {
 	category: string;
 	@Field({ nullable: true })
 	price: number;
-	@Field(() => [String], { nullable: true })
-	url?: string[];
+	// @Field(() => [String], { nullable: true })
+	// url?: string[];
 }
+
+const productRepo = getConnection().getRepository(Product);
 
 @Resolver()
 export class ProductResolver {
 	@Query(() => [Product], { nullable: true })
 	@UseMiddleware(isVendorAuth)
-	async myProducts(@Ctx() { prisma, req }: Context): Promise<Product[]> {
+	async myProducts(@Ctx() { req }: Context): Promise<Product[]> {
 		//@ts-ignore
 		const vId = req.session.vendorId;
-		const products = await prisma.product.findMany({
-			where: { authorId: vId },
-		});
+		const products = await productRepo
+			.createQueryBuilder("prod")
+			.innerJoinAndSelect("prod.vendor", "vendor")
+			.where("prod.vendorId = :vendorId", { vendorId: vId })
+			.orderBy("prod.createdAt", "DESC")
+			.getMany();
+
+		if (!products) throw new ApolloError("No Products Created");
+
 		return products;
 	}
 
-	@Mutation(() => Product)
+	@Query(() => [Product])
+	async allProducts(): Promise<Product[]> {
+		const products = await productRepo
+			.createQueryBuilder("prod")
+			.leftJoinAndSelect("prod.vendor", "vendor")
+			.orderBy("prod.createdAt", "DESC")
+			.getMany();
+		if (!products) {
+			throw new ApolloError("We will fill in Soon!!");
+		}
+		return products;
+	}
+
+	@Query(() => [Product])
+	async allProductsByCategory(@Arg("category") category: string) {
+		const products = await productRepo.find({
+			where: { category },
+			order: { createdAt: "DESC" },
+		});
+		if (!products) {
+			throw new ApolloError("We will fill in Soon!!");
+		}
+		return products;
+	}
+
+	@Query(() => Product)
+	async product(@Arg("id") id: string) {
+		const product = await Product.findOne({ id }, { relations: ["vendor"] });
+		if (!product) throw new ApolloError("Not Found");
+		return product;
+	}
+
+	@Mutation(() => Product, { nullable: true })
 	@UseMiddleware(isVendorAuth)
 	async editProduct(
-		@Ctx() { prisma, req }: Context,
-		@Arg("id", () => Int) id: number,
+		@Arg("id") id: string,
 		@Arg("data") data: EditProductInput
 	) {
-		//@ts-ignore
-		const vId = req.session.vendorId;
 		try {
-			const { name, description, category, price } = data;
 			if (!data.category) {
 				throw new ApolloError("Please select a category");
 			}
 			if (typeof data.price !== "number") {
 				throw new ApolloError("Price should be a number");
 			}
-			const updatedProduct = await prisma.product.update({
-				data: {
-					name,
-					description,
-					category,
-					price,
-				},
-				where: { id },
-			});
-			return updatedProduct;
+			//TODO photo updates
+			// if(data.url){
+
+			// 	const update = await Product.update({id}, {...data,  })
+			// }
+			const updatedProduct = await getConnection()
+				.createQueryBuilder()
+				.update(Product)
+				.set({ ...data })
+				.where("id = :id", { id })
+				.returning([
+					"name",
+					"description",
+					"category",
+					"price",
+					"vendorId",
+					"id",
+				])
+				.execute();
+			return updatedProduct.raw[0];
 		} catch (error) {
 			throw new ApolloError(error);
 		}
@@ -89,34 +135,31 @@ export class ProductResolver {
 
 	@Mutation(() => Product)
 	@UseMiddleware(isVendorAuth)
+	async deleteProduct(@Arg("id") id: string) {
+		const check = await Product.findOne({ id });
+		if (!check) throw new ApolloError("Product does not exist");
+		const product = await Product.delete({ id });
+		return product;
+	}
+
+	@Mutation(() => Product)
+	@UseMiddleware(isVendorAuth)
 	async createProduct(
-		@Ctx() { prisma, req }: Context,
+		@Ctx() { req }: Context,
 		@Arg("data") data: ProductInput
 	): Promise<Product> {
 		//@ts-ignore
 		const vId = req.session.vendorId;
-		try {
-			const { name, description, category, price, url } = data;
-			if (!data.category) {
-				throw new ApolloError("Please select a category");
-			}
-			if (typeof data.price !== "number") {
-				throw new ApolloError("Price should be a number");
-			}
-			const product = await prisma.product.create({
-				data: {
-					name,
-					description,
-					url,
-					category,
-					price,
-					authorId: vId,
-				},
-			});
-
-			return product;
-		} catch (err) {
-			throw new ApolloError(err);
+		if (!data.category) {
+			throw new ApolloError("Please select a category");
 		}
+		if (typeof data.price !== "number") {
+			throw new ApolloError("Price should be a number");
+		}
+		const product = await Product.create({
+			...data,
+			vendorId: vId,
+		}).save();
+		return product;
 	}
 }
