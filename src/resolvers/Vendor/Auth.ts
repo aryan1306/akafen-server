@@ -70,12 +70,14 @@ export class VendorAuth {
 			throw new ApolloError("This email is not verified");
 		}
 		if (!vendor.hasPaid) {
-			throw new ApolloError("Please confirm payment to login");
+			throw new ApolloError("Please pay the subscription amount to continue");
 		}
+
 		const validate = await verify(vendor.password, password);
 		if (!validate) {
 			throw new ApolloError("Incorrect password. Please try again");
 		}
+
 		//@ts-ignore
 		req.session.vendorId = vendor.id;
 		return vendor;
@@ -99,6 +101,22 @@ export class VendorAuth {
 		);
 		return true;
 	}
+
+	@Mutation(() => Boolean)
+	async reconfirmPayment(@Arg("email") email: string) {
+		const vendor = await Vendor.findOne({ email });
+		const vId = vendor?.id;
+		if (!vendor) {
+			return false;
+		}
+		await paymentMail(
+			await generatePaymentCode(vId!),
+			vendor.brandName,
+			vendor.mobile
+		);
+		return true;
+	}
+
 	@Mutation(() => Boolean)
 	async confirmPayment(@Arg("code") code: string): Promise<Boolean> {
 		const vId = await redis.get(code);

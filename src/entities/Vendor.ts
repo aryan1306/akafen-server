@@ -32,6 +32,7 @@ export class Vendor extends BaseEntity {
 	@Column({ default: false })
 	isVerified: boolean;
 
+	@Field()
 	@Column({ default: false })
 	hasPaid: boolean;
 

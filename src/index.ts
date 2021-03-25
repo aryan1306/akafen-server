@@ -30,8 +30,8 @@ const main = async () => {
 		entities: [Users, Vendor, Product],
 	});
 	conn.runMigrations();
+	// Vendor.delete({ brandName: "Aryan Singhal" });
 	// Product.delete({});
-	// Vendor.delete({});
 	// Profile.delete({});
 	const app = Express();
 
@@ -39,7 +39,8 @@ const main = async () => {
 	app.set("trust proxy", 1);
 	app.use(
 		cors({
-			origin: "https://akafenflea.online",
+			// origin: "https://akafenflea.online",
+			origin: "http://localhost:3000",
 			credentials: true,
 		})
 	);
