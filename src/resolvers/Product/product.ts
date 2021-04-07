@@ -13,6 +13,10 @@ import {
 import { Context } from "./../../index";
 import { Product } from "../../entities/Product";
 import { isVendorAuth } from "./../utils/middleware/isAuth";
+import algoliasearch from "algoliasearch";
+
+const client = algoliasearch(process.env.APP_ID!, process.env.API_KEY!);
+const index = client.initIndex("products");
 
 @InputType()
 class ProductInput {
@@ -160,6 +164,15 @@ export class ProductResolver {
 			...data,
 			vendorId: vId,
 		}).save();
+		let record = {
+			name: data.name,
+			description: data.description,
+			category: data.category,
+			price: data.price,
+			url: data.url,
+			vendorId: vId,
+		};
+		index.saveObject(record, { autoGenerateObjectIDIfNotExist: true });
 		return product;
 	}
 }

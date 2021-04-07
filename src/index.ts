@@ -18,7 +18,6 @@ export interface Context {
 	req: Request & { session: SessionData };
 	res: Response;
 }
-
 const main = async () => {
 	dotenv.config({ path: path.resolve(__dirname, "../.env") });
 	const conn = await createConnection({
@@ -39,8 +38,8 @@ const main = async () => {
 	app.set("trust proxy", 1);
 	app.use(
 		cors({
-			// origin: "https://akafenflea.online",
-			origin: "http://localhost:3000",
+			origin: "https://akafenflea.online",
+			// origin: "http://localhost:3000",
 			credentials: true,
 		})
 	);

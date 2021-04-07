@@ -52,6 +52,7 @@ export class UserResolver {
 		}
 		//@ts-ignore
 		req.session.userId = user.id;
+		console.log(req.session);
 		return user;
 	}
 
@@ -74,5 +75,11 @@ export class UserResolver {
 		}
 		const user = await Users.findOne({ id: uId });
 		return user;
+	}
+
+	@Query(() => [Users])
+	async allUsers() {
+		const users = await Users.find({});
+		return users;
 	}
 }

@@ -1,5 +1,6 @@
 import { ApolloError } from "apollo-server-express";
 import { hash, verify } from "argon2";
+import { Product } from "../..//entities/Product";
 import { Arg, Ctx, Mutation, Query, Resolver } from "type-graphql";
 import { Vendor } from "../../entities/Vendor";
 import { Context } from "../../index";
@@ -103,7 +104,7 @@ export class VendorAuth {
 	}
 
 	@Mutation(() => Boolean)
-	async reconfirmPayment(@Arg("email") email: string) {
+	async reconfirmPayment(@Arg("email") email: string, @Ctx() { req }: Context) {
 		const vendor = await Vendor.findOne({ email });
 		const vId = vendor?.id;
 		if (!vendor) {
@@ -114,6 +115,8 @@ export class VendorAuth {
 			vendor.brandName,
 			vendor.mobile
 		);
+		//@ts-ignore
+		req.session.vendorId = vId;
 		return true;
 	}
 
@@ -152,5 +155,19 @@ export class VendorAuth {
 				resolve(true);
 			})
 		);
+	}
+
+	@Query(() => [Vendor])
+	async allVendors() {
+		const vendors = await Vendor.find({});
+		return vendors;
+	}
+
+	@Mutation(() => Boolean)
+	async deleteVendor(@Arg("phone") phone: string) {
+		const vendor = await Vendor.findOne({ mobile: phone });
+		await Product.delete({ vendorId: vendor?.id });
+		await Vendor.delete({ mobile: phone });
+		return true;
 	}
 }
